@@ -1,0 +1,1163 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ByteTrip Masar</title>
+    
+    <!-- PWA META TAGS -->
+    <meta name="theme-color" content="#ffffff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/x-icon" href="img/ByteTripMasar_logo_icon_256.png">
+    <link rel="apple-touch-icon" href="img/ByteTripMasar_logo_icon_256.png">
+    
+    <!-- Tailwind & FontAwesome -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- LEAFLET JS CSS (Untuk Peta OSM) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Amiri:wght@400;700&display=swap');
+        
+        body { font-family: 'Inter', sans-serif; background-color: #e2e8f0; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        
+        .mobile-app-container { width: 100%; max-width: 414px; height: 100vh; max-height: 896px; background-color: #f8fafc; position: relative; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25); }
+        @media (min-width: 415px) { .mobile-app-container { height: 850px; border-radius: 32px; border: 8px solid #1e293b; } }
+
+        #app-screens { flex: 1; position: relative; overflow: hidden; }
+        .screen { display: none; flex-direction: column; height: 100%; width: 100%; position: absolute; top: 0; left: 0; background-color: #f8fafc; animation: fadeIn 0.2s ease-in-out; }
+        .screen.active { display: flex; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateX(5px); } to { opacity: 1; transform: translateX(0); } }
+
+        .scrollable-content { -ms-overflow-style: none; scrollbar-width: none; flex-grow: 1; overflow-y: auto; }
+        .scrollable-content::-webkit-scrollbar { display: none; }
+
+        @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4); } 70% { box-shadow: 0 0 0 15px rgba(220, 38, 38, 0); } 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); } }
+        @keyframes pulse-green { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+        .sos-pulse { animation: pulse-red 2s infinite; }
+        .status-pulse { animation: pulse-green 2s infinite; }
+        .arabic-text { font-family: 'Amiri', serif; direction: rtl; }
+
+        .timeline-line::before { content: ''; position: absolute; left: 19px; top: 32px; bottom: -16px; width: 2px; background-color: #e2e8f0; z-index: 0; }
+        .timeline-item:last-child .timeline-line::before { display: none; }
+        
+        /* Z-index safety for Leaflet inside modal */
+        .leaflet-container { z-index: 0 !important; }
+    </style>
+</head>
+<body>
+
+    <div class="mobile-app-container">
+        
+        <!-- SCREENS CONTAINER -->
+        <div id="app-screens">
+            
+            <!-- 1. SPLASH / LOGIN -->
+            <div id="screen-splash" class="screen active bg-white z-50">
+                <div class="flex flex-col items-center justify-center h-full text-slate-900 px-8 relative z-10">
+                    
+                    <div class="text-center mb-10 w-full">
+                        <img src="img/ByteTripMasar_logo.png" alt="ByteTrip Masar Logo" class="w-3/4 mx-auto mb-3 object-contain mix-blend-multiply">
+                        <p class="text-slate-500 text-[13px] font-medium mt-2">Sahabat Ibadah Anda di Tanah Suci</p>
+                    </div>
+
+                    <div class="w-full bg-slate-50 border border-slate-200 p-6 rounded-3xl shadow-sm">
+                        <label class="block text-slate-700 text-xs font-bold mb-2 uppercase tracking-wider">Nomor Paspor</label>
+                        <input type="text" value="A1234567" class="w-full bg-white text-emerald-900 text-lg font-bold text-center py-3.5 rounded-xl border border-slate-300 focus:outline-none focus:border-emerald-600 mb-4 uppercase transition-colors shadow-inner">
+                        <button onclick="handleLogin()" class="w-full bg-emerald-700 text-white font-extrabold text-[15px] py-3.5 rounded-xl shadow-md hover:bg-emerald-800 active:scale-95 transition-all">Masuk</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. DASBOR -->
+            <div id="screen-dasbor" class="screen">
+                
+                <div class="bg-white px-5 pt-10 pb-3 flex justify-between items-center z-10 shadow-sm border-b border-slate-100">
+                    <img src="img/ByteTripMasar_logo.png" alt="ByteTrip Masar" class="h-7 object-contain mix-blend-multiply">
+                    <button class="bg-amber-100 text-amber-700 text-[9px] font-black px-2 py-1 rounded-md shadow-sm uppercase border border-amber-200">Offline</button>
+                </div>
+                
+                <div class="bg-emerald-700 px-5 pt-5 pb-6 rounded-b-3xl shadow-md shrink-0 relative z-0">
+                    <div class="flex justify-between items-center">
+                        <div class="flex items-center gap-3">
+                            <div class="w-12 h-12 bg-white rounded-full flex items-center justify-center text-emerald-700 font-black text-xl shadow-sm border-2 border-emerald-400">HM</div>
+                            <div>
+                                <h2 class="text-white text-[16px] font-bold">H. Mursito</h2>
+                                <p class="text-emerald-100 text-[11px] font-medium">Paspor: A1234567 • Bus 02</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="scrollable-content px-4 pt-5 pb-28 space-y-5">
+                    <button onclick="toggleSOSModal(true)" class="w-full bg-red-600 sos-pulse text-white rounded-2xl p-4 shadow-sm flex items-center gap-4 active:scale-95 transition-transform border border-red-500">
+                        <div class="bg-white/20 p-3 rounded-full"><svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg></div>
+                        <div class="text-left"><span class="font-black text-xl tracking-wider block">S O S</span><span class="text-[11px] font-medium text-red-100">Saya Tersesat / Darurat</span></div>
+                    </button>
+
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div class="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200 text-slate-500"><i class="fas fa-user-tie text-xl"></i></div>
+                            <div>
+                                <p class="text-[10px] font-bold text-slate-400 uppercase">Tour Leader Anda</p>
+                                <h3 class="text-[14px] font-bold text-slate-900">Ust. Fulan Al-Hafidz</h3>
+                                <p class="text-[12px] font-medium text-slate-500">0812-3456-7890</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="bg-white rounded-xl p-3.5 shadow-sm border border-slate-200">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase mb-1">Hotel Saat Ini</p>
+                            <h3 class="text-[13px] font-black text-slate-900 truncate">Pullman Zamzam</h3>
+                            <p class="text-[11px] font-bold text-emerald-600 mt-1 flex items-center gap-1"><i class="fas fa-bed"></i> Kamar 304</p>
+                        </div>
+                        <div class="bg-white rounded-xl p-3.5 shadow-sm border border-slate-200">
+                            <p class="text-[10px] font-bold text-slate-400 uppercase mb-1">Status Koper</p>
+                            <h3 class="text-[13px] font-black text-slate-900 truncate">Sudah Tiba</h3>
+                            <p class="text-[11px] font-bold text-blue-600 mt-1 flex items-center gap-1"><i class="fas fa-suitcase"></i> Depan Kamar</p>
+                        </div>
+                    </div>
+
+                    <!-- ITINERARY HISTORY -->
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+                        <h3 class="text-[14px] font-black text-slate-900 mb-4 flex items-center gap-2"><i class="fas fa-list-ul text-emerald-600"></i> Jadwal Hari Ini</h3>
+                        <div class="pl-2">
+                            <div class="timeline-item relative flex items-start gap-4 pb-6">
+                                <div class="timeline-line"></div>
+                                <div class="relative z-10 w-6 h-6 rounded-full bg-slate-200 border-2 border-white shadow-sm flex items-center justify-center shrink-0 mt-0.5"><i class="fas fa-check text-[10px] text-slate-500"></i></div>
+                                <div class="flex-1"><h4 class="font-bold text-[13px] text-slate-500 line-through decoration-slate-300">Sholat Subuh Berjamaah</h4><p class="text-[11px] text-slate-400 mt-0.5">04:00 - Selesai</p></div>
+                            </div>
+                            <div class="timeline-item relative flex items-start gap-4 pb-6">
+                                <div class="timeline-line"></div>
+                                <div class="relative z-10 w-6 h-6 rounded-full bg-emerald-500 border-2 border-white shadow-sm status-pulse flex items-center justify-center shrink-0 mt-0.5"><div class="w-2 h-2 bg-white rounded-full"></div></div>
+                                <div class="flex-1 bg-emerald-50 border border-emerald-100 p-2.5 rounded-lg -mt-1.5"><h4 class="font-black text-[13px] text-emerald-800">Ziarah Jabal Nur</h4><p class="text-[11px] font-medium text-emerald-600 mt-1">07:00 - Berlangsung</p></div>
+                            </div>
+                            <div class="timeline-item relative flex items-start gap-4">
+                                <div class="timeline-line"></div>
+                                <div class="relative z-10 w-6 h-6 rounded-full bg-white border-2 border-slate-300 shadow-sm shrink-0 mt-0.5"></div>
+                                <div class="flex-1"><h4 class="font-bold text-[13px] text-slate-900">Kajian Ba'da Ashar</h4><p class="text-[11px] text-slate-500 mt-0.5">16:00 - Menuju / Mendatang</p></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. DOKUMEN -->
+            <div id="screen-docs" class="screen">
+                <header class="flex justify-between items-center px-4 pt-10 pb-3 bg-white border-b border-slate-100 z-10 shrink-0 text-slate-900 shadow-sm">
+                    <div class="w-10"></div>
+                    <h1 class="text-[16px] font-bold text-center flex-1">Jadwal & Dokumen</h1>
+                    <div class="w-10 flex justify-end">
+                        <img src="img/ByteTripMasar_logo.png" class="h-6 object-contain mix-blend-multiply">
+                    </div>
+                </header>
+                <div class="flex border-b border-slate-200 bg-white shrink-0">
+                    <button onclick="switchDocTab('jadwal')" id="tab-jadwal" class="flex-1 py-3 text-[13px] font-bold border-b-2 border-emerald-600 text-emerald-700 transition-colors">Jadwal Tiket</button>
+                    <button onclick="switchDocTab('dokumen')" id="tab-dokumen" class="flex-1 py-3 text-[13px] font-bold border-b-2 border-transparent text-slate-500 transition-colors">E-Dokumen</button>
+                </div>
+                <div class="scrollable-content px-4 pt-4 pb-28">
+                    <!-- Tab Jadwal -->
+                    <div id="content-jadwal" class="block space-y-4">
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+                            <div class="flex justify-between items-center mb-3">
+                                <span class="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-1 rounded">DEPARTURE</span>
+                                <span class="text-slate-500 text-[11px] font-semibold">12 Des 2026</span>
+                            </div>
+                            <div class="flex items-center justify-between mt-4">
+                                <div class="text-center"><h2 class="text-2xl font-black text-slate-900">CGK</h2><p class="text-[10px] text-slate-500">Jakarta (09:00)</p></div>
+                                <div class="flex-1 flex flex-col items-center px-4">
+                                    <i class="fas fa-plane text-emerald-600 mb-2"></i>
+                                    <div class="w-full h-px border-t-2 border-dashed border-slate-300 relative"></div>
+                                    <p class="text-[10px] text-slate-400 mt-2 font-bold">Saudia SV815</p>
+                                </div>
+                                <div class="text-center"><h2 class="text-2xl font-black text-slate-900">JED</h2><p class="text-[10px] text-slate-500">Jeddah (14:30)</p></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab Dokumen List -->
+                    <div id="content-dokumen" class="hidden">
+                        <ul class="divide-y divide-slate-100 bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                            <li onclick="viewDoc('Paspor Jamaah', 'img/sample-passport-ID.jpeg')" class="px-4 py-4 flex justify-between items-center cursor-pointer hover:bg-slate-50 transition-colors">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600"><i class="fas fa-passport text-lg"></i></div>
+                                    <div><p class="text-[14px] font-bold text-slate-900">Paspor</p><p class="text-[11px] text-emerald-600 font-semibold">Berlaku s/d 12 Ags 2030</p></div>
+                                </div>
+                                <i class="fas fa-chevron-right text-slate-300"></i>
+                            </li>
+                            <li onclick="viewDoc('Visa KSA', 'img/sample-visa-umrah.png')" class="px-4 py-4 flex justify-between items-center cursor-pointer hover:bg-slate-50 transition-colors">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600"><i class="fas fa-file-signature text-lg"></i></div>
+                                    <div><p class="text-[14px] font-bold text-slate-900">Visa</p><p class="text-[11px] text-emerald-600 font-semibold">Telah Terbit</p></div>
+                                </div>
+                                <i class="fas fa-chevron-right text-slate-300"></i>
+                            </li>
+                            <li onclick="viewDoc('Tiket Berangkat', 'img/sample-tiket-pesawat.jpg')" class="px-4 py-4 flex justify-between items-center cursor-pointer hover:bg-slate-50 transition-colors">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600"><i class="fas fa-ticket-alt text-lg"></i></div>
+                                    <div><p class="text-[14px] font-bold text-slate-900">Tiket Berangkat</p><p class="text-[11px] text-slate-500">Saudia SV815</p></div>
+                                </div>
+                                <i class="fas fa-chevron-right text-slate-300"></i>
+                            </li>
+                            <li onclick="viewDoc('Tiket Pulang', 'img/sample-tiket-pesawat.jpg')" class="px-4 py-4 flex justify-between items-center cursor-pointer hover:bg-slate-50 transition-colors">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600"><i class="fas fa-ticket-alt text-lg"></i></div>
+                                    <div><p class="text-[14px] font-bold text-slate-900">Tiket Pulang</p><p class="text-[11px] text-slate-500">Saudia SV816</p></div>
+                                </div>
+                                <i class="fas fa-chevron-right text-slate-300"></i>
+                            </li>
+                            <li onclick="viewDoc('Voucher Hotel Mekkah', 'img/sample-hotelmekkah.jpg')" class="px-4 py-4 flex justify-between items-center cursor-pointer hover:bg-slate-50 transition-colors">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-lg bg-purple-50 flex items-center justify-center text-purple-600"><i class="fas fa-hotel text-lg"></i></div>
+                                    <div><p class="text-[14px] font-bold text-slate-900">Hotel Mekkah</p><p class="text-[11px] text-slate-500">Check-in: 12 Des</p></div>
+                                </div>
+                                <i class="fas fa-chevron-right text-slate-300"></i>
+                            </li>
+                            <li onclick="viewDoc('Voucher Hotel Madinah', 'img/sample-ereceipt-hotelmadinah.png')" class="px-4 py-4 flex justify-between items-center cursor-pointer hover:bg-slate-50 transition-colors">
+                                <div class="flex items-center gap-3">
+                                    <div class="w-10 h-10 rounded-lg bg-purple-50 flex items-center justify-center text-purple-600"><i class="fas fa-hotel text-lg"></i></div>
+                                    <div><p class="text-[14px] font-bold text-slate-900">Hotel Madinah</p><p class="text-[11px] text-slate-500">Check-in: 17 Des</p></div>
+                                </div>
+                                <i class="fas fa-chevron-right text-slate-300"></i>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. DOA -->
+            <div id="screen-doa" class="screen">
+                <header class="flex justify-between items-center px-4 pt-10 pb-3 bg-white border-b border-slate-100 z-10 shrink-0 text-slate-900 shadow-sm">
+                    <div class="w-10"></div>
+                    <h1 class="text-[16px] font-bold text-center flex-1">Panduan & Doa</h1>
+                    <div class="w-10 flex justify-end">
+                        <img src="img/ByteTripMasar_logo.png" class="h-6 object-contain mix-blend-multiply">
+                    </div>
+                </header>
+                <div class="px-4 py-3 bg-white border-b border-slate-100 flex gap-2 z-10 shrink-0 shadow-sm">
+                    <input type="text" placeholder="Cari doa (misal: Tawaf)..." class="border border-slate-300 rounded-lg px-4 py-2.5 text-[12px] font-medium text-slate-700 outline-none focus:border-emerald-600 flex-1 bg-slate-50">
+                </div>
+                <div class="scrollable-content px-4 pt-4 pb-28 space-y-3">
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Doa Masuk Masjidil Haram</h3></div>
+                        <div class="p-4">
+                            <p class="arabic-text text-2xl leading-[2.2] text-slate-900 text-right mb-3">اللَّهُمَّ افْتَحْ لِي أَبْوَابَ رَحْمَتِكَ</p>
+                            <p class="text-[12px] font-medium text-slate-600 italic">"Allahummaf-tahlii abwaaba rahmatika"</p>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Niat Umroh</h3></div>
+                        <div class="p-4">
+                            <p class="arabic-text text-2xl leading-[2.2] text-slate-900 text-right mb-3">لَبَّيْكَ اللَّهُمَّ عُمْرَةً</p>
+                            <p class="text-[12px] font-medium text-slate-600 italic">"Labbaikallahumma 'Umratan"</p>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Doa Melihat Ka'bah</h3></div>
+                        <div class="p-4">
+                            <p class="arabic-text text-2xl leading-[2.2] text-slate-900 text-right mb-3">اللَّهُمَّ زِدْ هَذَا الْبَيْتَ تَشْرِيفًا وَتَعْظِيمًا وَتَكْرِيمًا وَمَهَابَةً</p>
+                            <p class="text-[12px] font-medium text-slate-600 italic">"Allahumma zid hadzal baita tasyrifan wa ta'dhiman wa takriman wa mahabatan"</p>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Doa Tawaf Putaran 1</h3></div>
+                        <div class="p-4">
+                            <p class="arabic-text text-2xl leading-[2.2] text-slate-900 text-right mb-3">سُبْحَانَ اللَّهِ وَالْحَمْدُ لِلَّهِ وَلَا إِلَهَ إِلَّا اللَّهُ وَاللَّهُ أَكْبَرُ</p>
+                            <p class="text-[12px] font-medium text-slate-600 italic">"Subhanallah walhamdulillah wala ilaha illallah wallahu akbar"</p>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Doa Minum Air Zamzam</h3></div>
+                        <div class="p-4">
+                            <p class="arabic-text text-2xl leading-[2.2] text-slate-900 text-right mb-3">اللَّهُمَّ إِنِّي أَسْأَلُكَ عِلْمًا نَافِعًا وَرِزْقًا وَاسِعًا وَشِفَاءً مِنْ كُلِّ دَاءٍ</p>
+                            <p class="text-[12px] font-medium text-slate-600 italic">"Allahumma inni as-aluka 'ilman naafi'an wa rizqan waasi'an wa syifaa'an min kulli daa-in"</p>
+                        </div>
+                    </div>
+                     <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Doa Menuju Bukit Shafa</h3></div>
+                        <div class="p-4">
+                            <p class="arabic-text text-2xl leading-[2.2] text-slate-900 text-right mb-3">إِنَّ الصَّفَا وَالْمَرْوَةَ مِنْ شَعَائِرِ اللَّهِ</p>
+                            <p class="text-[12px] font-medium text-slate-600 italic">"Innas shafa wal marwata min sya'aairillah"</p>
+                        </div>
+                    </div>
+                     <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Doa di Atas Bukit Shafa</h3></div>
+                        <div class="p-4">
+                            <p class="arabic-text text-2xl leading-[2.2] text-slate-900 text-right mb-3">اللَّهُ أَكْبَرُ اللَّهُ أَكْبَرُ اللَّهُ أَكْبَرُ</p>
+                            <p class="text-[12px] font-medium text-slate-600 italic">"Allahu akbar, Allahu akbar, Allahu akbar"</p>
+                        </div>
+                    </div>
+                     <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Doa Sa'i Putaran 1</h3></div>
+                        <div class="p-4">
+                            <p class="arabic-text text-2xl leading-[2.2] text-slate-900 text-right mb-3">اللَّهُمَّ اسْتَعْمِلْنِي بِسُنَّةِ نَبِيِّكَ</p>
+                            <p class="text-[12px] font-medium text-slate-600 italic">"Allahummas-ta'milnii bisunnati nabiyyika"</p>
+                        </div>
+                    </div>
+                     <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Doa Diantara Pilar Hijau (Bagi Laki-laki)</h3></div>
+                        <div class="p-4">
+                            <p class="arabic-text text-2xl leading-[2.2] text-slate-900 text-right mb-3">رَبِّ اغْفِرْ وَارْحَمْ وَتَجَاوَزْ عَمَّا تَعْلَمْ</p>
+                            <p class="text-[12px] font-medium text-slate-600 italic">"Rabbighfir warham watajaawaz 'ammaa ta'lam"</p>
+                        </div>
+                    </div>
+                     <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Doa Tahallul (Bercukur)</h3></div>
+                        <div class="p-4">
+                            <p class="arabic-text text-2xl leading-[2.2] text-slate-900 text-right mb-3">اللَّهُمَّ اجْعَلْ لِكُلِّ شَعْرَةٍ نُورًا يَوْمَ الْقِيَامَةِ</p>
+                            <p class="text-[12px] font-medium text-slate-600 italic">"Allahummaj'al likulli sya'ratin nuuran yaumal qiyaamati"</p>
+                        </div>
+                    </div>
+                     <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Doa Selesai Umroh</h3></div>
+                        <div class="p-4">
+                            <p class="arabic-text text-2xl leading-[2.2] text-slate-900 text-right mb-3">اللَّهُمَّ تَقَبَّلْ مِنَّا عُمْرَتَنَا</p>
+                            <p class="text-[12px] font-medium text-slate-600 italic">"Allahumma taqabbal minna 'umratanaa"</p>
+                        </div>
+                    </div>
+                     <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Doa Masuk Masjid Nabawi</h3></div>
+                        <div class="p-4">
+                            <p class="arabic-text text-2xl leading-[2.2] text-slate-900 text-right mb-3">بِسْمِ اللَّهِ وَالصَّلَاةُ وَالسَّلَامُ عَلَى رَسُولِ اللَّهِ</p>
+                            <p class="text-[12px] font-medium text-slate-600 italic">"Bismillah wasshalaatu wassalaamu 'alaa rasuulillah"</p>
+                        </div>
+                    </div>
+                     <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Doa Salam kepada Rasulullah</h3></div>
+                        <div class="p-4">
+                            <p class="arabic-text text-2xl leading-[2.2] text-slate-900 text-right mb-3">السَّلَامُ عَلَيْكَ يَا رَسُولَ اللَّهِ</p>
+                            <p class="text-[12px] font-medium text-slate-600 italic">"Assalaamu 'alaika yaa rasuulallah"</p>
+                        </div>
+                    </div>
+                     <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Doa Salam kepada Abu Bakar</h3></div>
+                        <div class="p-4">
+                            <p class="arabic-text text-2xl leading-[2.2] text-slate-900 text-right mb-3">السَّلَامُ عَلَيْكَ يَا أَبَا بَكْرٍ</p>
+                            <p class="text-[12px] font-medium text-slate-600 italic">"Assalaamu 'alaika yaa abaa bakrin"</p>
+                        </div>
+                    </div>
+                     <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Doa Salam kepada Umar</h3></div>
+                        <div class="p-4">
+                            <p class="arabic-text text-2xl leading-[2.2] text-slate-900 text-right mb-3">السَّلَامُ عَلَيْكَ يَا عُمَرُ</p>
+                            <p class="text-[12px] font-medium text-slate-600 italic">"Assalaamu 'alaika yaa 'umaru"</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 5. PETA LOKASI -->
+            <div id="screen-peta" class="screen">
+                <header class="flex justify-between items-center px-4 pt-10 pb-3 bg-white border-b border-slate-100 z-10 shrink-0 text-slate-900 shadow-sm">
+                    <div class="w-10"></div>
+                    <h1 class="text-[16px] font-bold text-center flex-1">Direktori Lokasi</h1>
+                    <div class="w-10 flex justify-end">
+                        <img src="img/ByteTripMasar_logo.png" class="h-6 object-contain mix-blend-multiply">
+                    </div>
+                </header>
+                <div class="scrollable-content px-4 pt-4 pb-28 space-y-4">
+                    <!-- KOTA MEKKAH -->
+                    <div>
+                        <h2 class="text-[13px] font-black text-emerald-800 mb-2">MEKKAH</h2>
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div class="bg-slate-50 px-3 py-2 border-b border-slate-200 font-bold text-[11px] text-slate-700">Masjidil Haram</div>
+                            <ul class="divide-y divide-slate-100">
+                                <li onclick="openMapModal('WC 6 Masjidil Haram')" class="px-3 py-3 flex justify-between items-center cursor-pointer hover:bg-emerald-50">
+                                    <span class="text-[13px] font-medium text-slate-800">WC 6</span><i class="fas fa-map-marker-alt text-emerald-600"></i>
+                                </li>
+                                <li onclick="openMapModal('Pintu 8 Masjidil Haram')" class="px-3 py-3 flex justify-between items-center cursor-pointer hover:bg-emerald-50">
+                                    <span class="text-[13px] font-medium text-slate-800">Pintu 8</span><i class="fas fa-map-marker-alt text-emerald-600"></i>
+                                </li>
+                            </ul>
+                            <div class="bg-slate-50 px-3 py-2 border-y border-slate-200 font-bold text-[11px] text-slate-700">Hotel</div>
+                            <ul class="divide-y divide-slate-100">
+                                <li onclick="openMapModal('Pullman Zamzam Mekkah')" class="px-3 py-3 flex justify-between items-center cursor-pointer hover:bg-emerald-50">
+                                    <span class="text-[13px] font-bold text-slate-900">Hotel Anda (Saat Ini)</span><i class="fas fa-map-marker-alt text-emerald-600"></i>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                    <!-- KOTA MADINAH -->
+                    <div>
+                        <h2 class="text-[13px] font-black text-emerald-800 mb-2">MADINAH</h2>
+                        <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                            <div class="bg-slate-50 px-3 py-2 border-b border-slate-200 font-bold text-[11px] text-slate-700">Masjid Nabawi</div>
+                            <ul class="divide-y divide-slate-100">
+                                <li onclick="openMapModal('Pintu 1 Masjid Nabawi')" class="px-3 py-3 flex justify-between items-center cursor-pointer hover:bg-emerald-50">
+                                    <span class="text-[13px] font-medium text-slate-800">Pintu 1</span><i class="fas fa-map-marker-alt text-emerald-600"></i>
+                                </li>
+                                <li onclick="openMapModal('Makam Baqi')" class="px-3 py-3 flex justify-between items-center cursor-pointer hover:bg-emerald-50">
+                                    <span class="text-[13px] font-medium text-slate-800">Makam Baqi</span><i class="fas fa-map-marker-alt text-emerald-600"></i>
+                                </li>
+                            </ul>
+                            <div class="bg-slate-50 px-3 py-2 border-y border-slate-200 font-bold text-[11px] text-slate-700">Lainnya</div>
+                            <ul class="divide-y divide-slate-100">
+                                <li onclick="openMapModal('Lokasi Miqot (Bir Ali)')" class="px-3 py-3 flex justify-between items-center cursor-pointer hover:bg-emerald-50">
+                                    <span class="text-[13px] font-medium text-slate-800">Lokasi Miqot</span><i class="fas fa-map-marker-alt text-emerald-600"></i>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 6. KAMUS OFFLINE -->
+            <div id="screen-kamus" class="screen">
+                <header class="flex justify-between items-center px-4 pt-10 pb-3 bg-white border-b border-slate-100 z-10 shrink-0 text-slate-900 shadow-sm">
+                    <button onclick="navTo('screen-dasbor')" class="p-1 -ml-1 text-slate-700"><i class="fas fa-chevron-left text-lg"></i></button>
+                    <h1 class="text-[16px] font-bold text-center flex-1">Kamus Indonesia - Inggris</h1>
+                    <div class="flex justify-end items-center w-10">
+                        <img src="img/ByteTripMasar_logo.png" class="h-6 object-contain mix-blend-multiply">
+                    </div>
+                </header>
+                <div class="px-4 py-3 bg-white border-b border-slate-100 shrink-0 shadow-sm z-10">
+                    <input type="text" placeholder="Cari kata (contoh: harga, toilet)..." class="w-full border border-slate-300 rounded-lg px-4 py-2.5 text-[12px] font-medium text-slate-700 outline-none focus:border-emerald-600 bg-slate-50">
+                </div>
+                <div class="scrollable-content px-4 pt-4 pb-28 space-y-3">
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Berapa harganya?</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">How much is this?</p><p class="text-[12px] text-slate-500 italic">"Hau mach is dis?"</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Di mana toilet / kamar mandi?</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Where is the toilet?</p><p class="text-[12px] text-slate-500 italic">"Wer is de toilit?"</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Saya mau beli ini.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">I want to buy this.</p><p class="text-[12px] text-slate-500 italic">"Ai won to bai dis."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Tolong! / Minta tolong!</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Help!</p><p class="text-[12px] text-slate-500 italic">"Help!"</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Saya tersesat.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">I am lost.</p><p class="text-[12px] text-slate-500 italic">"Ai em lost."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Di mana masjid?</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Where is the mosque?</p><p class="text-[12px] text-slate-500 italic">"Wer is de mosk?"</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                     <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Terima kasih.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Thank you.</p><p class="text-[12px] text-slate-500 italic">"Teng kyu."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                     <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Sama-sama.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">You are welcome.</p><p class="text-[12px] text-slate-500 italic">"Yu ar welkem."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                     <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Permisi / Maaf.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Excuse me.</p><p class="text-[12px] text-slate-500 italic">"Ekskyus mi."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                     <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Saya tidak mengerti.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">I don't understand.</p><p class="text-[12px] text-slate-500 italic">"Ai don andersten."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Ya.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Yes.</p><p class="text-[12px] text-slate-500 italic">"Yes."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Tidak.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">No.</p><p class="text-[12px] text-slate-500 italic">"No."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Bisa tolong saya?</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Can you help me?</p><p class="text-[12px] text-slate-500 italic">"Ken yu help mi?"</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Jam berapa sekarang?</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">What time is it?</p><p class="text-[12px] text-slate-500 italic">"Wot taim is it?"</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Di mana rumah sakit?</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Where is the hospital?</p><p class="text-[12px] text-slate-500 italic">"Wer is de hospitel?"</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Saya butuh dokter.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">I need a doctor.</p><p class="text-[12px] text-slate-500 italic">"Ai nid e dokter."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Tolong panggil polisi.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Please call the police.</p><p class="text-[12px] text-slate-500 italic">"Plis kol de polis."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Di mana stasiun bus?</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Where is the bus station?</p><p class="text-[12px] text-slate-500 italic">"Wer is de bas steisyen?"</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Bisa kurangi harganya?</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Can you give me a discount?</p><p class="text-[12px] text-slate-500 italic">"Ken yu giv mi e diskaun?"</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Saya tidak mau.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">I don't want it.</p><p class="text-[12px] text-slate-500 italic">"Ai don won it."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Maaf, saya terburu-buru.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Sorry, I am in a hurry.</p><p class="text-[12px] text-slate-500 italic">"Sori, ai em in e hari."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Bisa bicara lebih pelan?</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Can you speak slower?</p><p class="text-[12px] text-slate-500 italic">"Ken yu spik slouwer?"</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Tolong tuliskan.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Please write it down.</p><p class="text-[12px] text-slate-500 italic">"Plis rait it daun."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Tunggu sebentar.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Wait a moment.</p><p class="text-[12px] text-slate-500 italic">"Weit e moument."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Di mana restoran terdekat?</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Where is the nearest restaurant?</p><p class="text-[12px] text-slate-500 italic">"Wer is de nirest restoren?"</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Saya lapar.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">I am hungry.</p><p class="text-[12px] text-slate-500 italic">"Ai em hangri."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Saya haus.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">I am thirsty.</p><p class="text-[12px] text-slate-500 italic">"Ai em tersti."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Minta bill/bonnya.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Can I have the bill, please?</p><p class="text-[12px] text-slate-500 italic">"Ken ai hev de bil, plis?"</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Apakah air ini bisa diminum?</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Is this water drinkable?</p><p class="text-[12px] text-slate-500 italic">"Is dis woter drinkebel?"</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Saya tidak makan daging babi.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">I don't eat pork.</p><p class="text-[12px] text-slate-500 italic">"Ai don it pork."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Tolong tunjukkan jalannya.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Please show me the way.</p><p class="text-[12px] text-slate-500 italic">"Plis syo mi de wei."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Ke kiri.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Turn left.</p><p class="text-[12px] text-slate-500 italic">"Tern left."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Ke kanan.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Turn right.</p><p class="text-[12px] text-slate-500 italic">"Tern rait."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Jalan lurus.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Go straight.</p><p class="text-[12px] text-slate-500 italic">"Go streit."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Apakah jauh dari sini?</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Is it far from here?</p><p class="text-[12px] text-slate-500 italic">"Is it far from hir?"</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Saya mau ke bandara.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">I want to go to the airport.</p><p class="text-[12px] text-slate-500 italic">"Ai won to go to de erport."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Hati-hati!</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Be careful!</p><p class="text-[12px] text-slate-500 italic">"Bi kerful!"</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Awas!</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Watch out!</p><p class="text-[12px] text-slate-500 italic">"Woch aut!"</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Tolong panggil ambulans.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Please call an ambulance.</p><p class="text-[12px] text-slate-500 italic">"Plis kol en embyulens."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Saya tidak enak badan.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">I don't feel well.</p><p class="text-[12px] text-slate-500 italic">"Ai don fil wel."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Di mana apotek?</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Where is the pharmacy?</p><p class="text-[12px] text-slate-500 italic">"Wer is de farmasi?"</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Saya kehilangan dompet saya.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">I lost my wallet.</p><p class="text-[12px] text-slate-500 italic">"Ai lost mai wolet."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Tolong bantu saya.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Please help me.</p><p class="text-[12px] text-slate-500 italic">"Plis help mi."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Bisa pinjam telepon Anda?</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Can I use your phone?</p><p class="text-[12px] text-slate-500 italic">"Ken ai yus yor fon?"</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Saya butuh air.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">I need water.</p><p class="text-[12px] text-slate-500 italic">"Ai nid woter."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Berapa lama lagi?</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">How much longer?</p><p class="text-[12px] text-slate-500 italic">"Hau mach longer?"</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Saya tidak tahu.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">I don't know.</p><p class="text-[12px] text-slate-500 italic">"Ai don no."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Boleh saya masuk?</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">May I come in?</p><p class="text-[12px] text-slate-500 italic">"Mei ai kam in?"</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Tunggu saya di sini.</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Wait for me here.</p><p class="text-[12px] text-slate-500 italic">"Weit for mi hir."</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Apa ini?</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">What is this?</p><p class="text-[12px] text-slate-500 italic">"Wot is dis?"</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Siapa dia?</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Who is he/she?</p><p class="text-[12px] text-slate-500 italic">"Hu is hi/syi?"</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Kapan kita berangkat?</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">When are we leaving?</p><p class="text-[12px] text-slate-500 italic">"Wen ar wi living?"</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                        <div class="p-3 bg-slate-50 border-b border-slate-100"><h3 class="font-bold text-[13px] text-slate-900">Di mana koper saya?</h3></div>
+                        <div class="p-4 flex items-center justify-between">
+                            <div><p class="text-[16px] font-black text-slate-900 mb-1">Where is my luggage?</p><p class="text-[12px] text-slate-500 italic">"Wer is mai lagij?"</p></div>
+                            <button class="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-full flex items-center justify-center"><i class="fas fa-volume-up"></i></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 7. KOMPAS -->
+            <div id="screen-kompas" class="screen">
+                <header class="flex justify-between items-center px-4 pt-10 pb-3 bg-white border-b border-slate-100 z-10 shrink-0 text-slate-900 shadow-sm">
+                    <button onclick="navTo('screen-dasbor')" class="p-1 -ml-1 text-slate-700"><i class="fas fa-chevron-left text-lg"></i></button>
+                    <h1 class="text-[16px] font-bold text-center flex-1">Arah ke Hotel</h1>
+                    <div class="flex justify-end items-center w-10">
+                        <img src="img/ByteTripMasar_logo.png" class="h-6 object-contain mix-blend-multiply">
+                    </div>
+                </header>
+                <div class="scrollable-content flex flex-col items-center justify-center p-6 pb-28 text-center bg-slate-50">
+                    <h2 class="text-2xl font-black text-slate-900 mb-1">Pullman Zamzam</h2>
+                    <p class="text-sm font-semibold text-slate-500 mb-10">Jarak saat ini: <span class="text-emerald-600 font-bold">450 Meter</span></p>
+                    <div class="relative w-64 h-64 bg-white rounded-full shadow-[0_15px_35px_rgba(0,0,0,0.1)] border-8 border-slate-100 flex items-center justify-center mb-8">
+                        <div class="absolute z-10 w-2 h-32 bg-red-500 rounded-t-full top-6 shadow-md"></div>
+                        <div class="absolute z-10 w-4 h-4 bg-slate-800 rounded-full border-2 border-white shadow-sm"></div>
+                        <div class="absolute inset-4 border-2 border-dashed border-emerald-200 rounded-full"></div>
+                        <span class="absolute top-2 text-xs font-bold text-emerald-600">DEPAN</span>
+                    </div>
+                    <div class="bg-emerald-50 text-emerald-800 p-4 rounded-xl border border-emerald-100 font-medium text-[12px] flex items-start gap-3">
+                        <i class="fas fa-info-circle text-xl shrink-0 mt-0.5"></i>
+                        <p class="text-left leading-relaxed">Ikuti arah panah merah. Fitur kompas ini terhubung ke GPS dan tidak memerlukan internet.</p>
+                    </div>
+                </div>
+            </div>
+
+        </div> <!-- /app-screens -->
+
+        <!-- ============================================== -->
+        <!-- GLOBAL BOTTOM NAVIGATION                       -->
+        <!-- ============================================== -->
+        <nav id="global-bottom-nav" class="hidden absolute bottom-0 w-full bg-white border-t border-slate-200 flex justify-between items-center px-1 py-1 z-30 pb-6 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+            <button onclick="navTo('screen-dasbor')" class="nav-btn flex flex-col items-center justify-center flex-1 py-1.5 transition-colors" data-target="screen-dasbor">
+                <i class="fas fa-dashboard text-xl mb-1"></i>
+                <span class="text-[10px] font-bold">Dasbor</span>
+            </button>
+            <button onclick="navTo('screen-docs')" class="nav-btn flex flex-col items-center justify-center flex-1 py-1.5 transition-colors" data-target="screen-docs">
+                <i class="fas fa-folder text-xl mb-1"></i>
+                <span class="text-[10px] font-bold">Dokumen</span>
+            </button>
+            
+            <div class="flex-1 flex justify-center">
+                <button onclick="navTo('screen-doa')" class="relative -top-6 bg-emerald-700 text-white w-14 h-14 rounded-full flex items-center justify-center shadow-xl border-[5px] border-white hover:bg-emerald-800 transition-colors active:scale-95 z-40">
+                    <i class="fas fa-book-open text-xl"></i>
+                </button>
+                <span class="absolute bottom-6 text-[11px] font-bold text-emerald-700">Doa</span>
+            </div>
+
+            <button onclick="navTo('screen-peta')" class="nav-btn flex flex-col items-center justify-center flex-1 py-1.5 transition-colors" data-target="screen-peta">
+                <i class="fas fa-map-marked-alt text-xl mb-1"></i>
+                <span class="text-[10px] font-bold">Peta</span>
+            </button>
+            <button onclick="toggleLainnyaMenu(true)" class="nav-btn flex flex-col items-center justify-center flex-1 py-1.5 transition-colors" data-target="lainnya">
+                <i class="fas fa-ellipsis-h text-xl mb-1"></i>
+                <span class="text-[10px] font-bold">Lainnya</span>
+            </button>
+        </nav>
+        <div class="absolute bottom-2 left-1/2 -translate-x-1/2 w-1/3 h-1 bg-slate-300 rounded-full z-40 hidden" id="home-indicator"></div>
+
+        <!-- ============================================== -->
+        <!-- LAINNYA MENU (BOTTOM SHEET)                    -->
+        <!-- ============================================== -->
+        <div id="lainnyaMenuOverlay" class="absolute inset-0 bg-slate-900/40 z-40 hidden opacity-0 transition-opacity duration-300" onclick="toggleLainnyaMenu(false)"></div>
+        <div id="lainnyaMenuSheet" class="absolute bottom-0 left-0 w-full bg-white rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.1)] z-50 transform translate-y-full transition-transform duration-300 pb-8 pt-3">
+            <div class="w-12 h-1.5 bg-slate-200 rounded-full mx-auto mb-5"></div>
+            <div class="px-6">
+                <!-- Group 1 -->
+                <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Panduan & Bantuan</div>
+                <div class="flex flex-col gap-1 mb-3">
+                    <button onclick="toggleLainnyaMenu(false); setTimeout(() => navTo('screen-kompas'), 300);" class="flex items-center gap-3 w-full py-2.5 text-left text-[14px] font-semibold text-slate-700 hover:bg-slate-50 rounded-xl px-3 -mx-3 transition-colors">
+                        <i class="fas fa-Masar text-slate-400 text-lg w-5 text-center"></i>
+                        Kompas
+                    </button>
+                    <!-- Tambahan Kamus Offline -->
+                    <button onclick="toggleLainnyaMenu(false); setTimeout(() => navTo('screen-kamus'), 300);" class="flex items-center gap-3 w-full py-2.5 text-left text-[14px] font-semibold text-slate-700 hover:bg-slate-50 rounded-xl px-3 -mx-3 transition-colors">
+                        <i class="fas fa-language text-slate-400 text-lg w-5 text-center"></i>
+                        Kamus Offline (Id-En)
+                    </button>
+                    <!-- Perubahan Nomor Darurat (Modal Trigger) -->
+                    <button onclick="toggleLainnyaMenu(false); setTimeout(() => openEmergencyModal(), 300);" class="flex items-center gap-3 w-full py-2.5 text-left text-[14px] font-semibold text-slate-700 hover:bg-slate-50 rounded-xl px-3 -mx-3 transition-colors">
+                        <i class="fas fa-phone-alt text-slate-400 text-lg w-5 text-center"></i>
+                        Nomor Darurat
+                    </button>
+                </div>
+                
+                <div class="h-px bg-slate-100 my-4 -mx-6"></div>
+
+                <!-- Group 2 -->
+                <div class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Akun</div>
+                <div class="flex flex-col gap-1">
+                    <button onclick="handleLogout()" class="flex items-center gap-3 w-full py-2.5 text-left text-[14px] font-semibold text-red-600 hover:bg-red-50 rounded-xl px-3 -mx-3 transition-colors">
+                        <i class="fas fa-sign-out-alt text-red-500 text-lg w-5 text-center"></i>
+                        Logout
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- MODALS (EMERGENCY, SOS, IMAGE MAP, DOC VIEWER) -->
+        <!-- ============================================== -->
+
+        <!-- Modal Nomor Darurat -->
+        <div id="emergencyModalOverlay" class="absolute inset-0 bg-slate-900/80 z-50 hidden opacity-0 transition-opacity duration-300 flex items-center justify-center px-6">
+            <div id="emergencyModalCard" class="bg-white w-full rounded-3xl p-6 transform scale-95 transition-transform duration-300 shadow-2xl">
+                <div class="w-14 h-14 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <i class="fas fa-phone-alt text-2xl"></i>
+                </div>
+                <h2 class="text-xl font-bold text-center text-slate-900 mb-6">Kontak Darurat</h2>
+                
+                <div class="space-y-4 mb-6">
+                    <div class="bg-slate-50 border border-slate-200 p-4 rounded-xl flex justify-between items-center active:bg-slate-100 cursor-pointer">
+                        <div>
+                            <p class="text-[12px] font-bold text-slate-500 uppercase tracking-wider mb-1">Admin Pusat TDA</p>
+                            <p class="text-2xl font-black text-slate-900">+62 811 2345 678</p>
+                        </div>
+                        <div class="w-10 h-10 bg-green-500 text-white rounded-full flex items-center justify-center shadow-md"><i class="fas fa-phone"></i></div>
+                    </div>
+                    <div class="bg-slate-50 border border-slate-200 p-4 rounded-xl flex justify-between items-center active:bg-slate-100 cursor-pointer">
+                        <div>
+                            <p class="text-[12px] font-bold text-slate-500 uppercase tracking-wider mb-1">Dubes RI (KSA)</p>
+                            <p class="text-2xl font-black text-slate-900">+966 50 123 4567</p>
+                        </div>
+                        <div class="w-10 h-10 bg-green-500 text-white rounded-full flex items-center justify-center shadow-md"><i class="fas fa-phone"></i></div>
+                    </div>
+                </div>
+
+                <button onclick="closeEmergencyModal()" class="w-full bg-slate-100 text-slate-700 font-bold py-3.5 rounded-xl active:bg-slate-200 transition-colors">Tutup</button>
+            </div>
+        </div>
+
+        <!-- SOS Modal -->
+        <div id="sosModalOverlay" class="absolute inset-0 bg-slate-900/80 z-50 hidden opacity-0 transition-opacity duration-300 flex items-center justify-center px-6">
+            <div id="sosModalCard" class="bg-white w-full rounded-3xl p-6 transform scale-95 transition-transform duration-300 shadow-2xl">
+                <div class="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4"><i class="fas fa-exclamation-triangle text-3xl"></i></div>
+                <h2 class="text-xl font-bold text-center text-slate-900 mb-2">Kirim Sinyal Darurat?</h2>
+                <p class="text-center text-slate-600 text-[13px] mb-6 font-medium">Lokasi Anda akan dikirimkan ke Ust. Fulan (Tour Leader).</p>
+                <button onclick="sendSOS()" class="w-full bg-red-600 text-white font-bold text-[15px] py-3.5 rounded-xl shadow-md mb-3 active:scale-95 transition-transform">KIRIM LOKASI SAYA</button>
+                <button onclick="toggleSOSModal(false)" class="w-full bg-slate-100 text-slate-700 font-bold py-3.5 rounded-xl active:bg-slate-200 transition-colors">Batal</button>
+            </div>
+        </div>
+
+        <!-- Document Viewer Modal -->
+        <div id="docViewerModal" class="absolute inset-0 bg-slate-900 z-50 transform translate-y-full transition-transform duration-300 flex flex-col">
+            <header class="flex items-center justify-between px-4 pt-12 pb-3 bg-slate-800 text-white shrink-0 z-20 shadow-md">
+                <button onclick="closeDocViewer()" class="p-1 -ml-1 text-white"><i class="fas fa-times text-xl"></i></button>
+                <h2 id="doc-viewer-title" class="text-[15px] font-bold flex-1 text-center">Dokumen</h2>
+                <div class="w-8"></div>
+            </header>
+            <div class="flex-1 relative bg-slate-900 p-4 flex items-center justify-center overflow-hidden">
+                <img id="doc-viewer-img" src="" class="max-w-full max-h-full object-contain rounded-lg shadow-2xl">
+            </div>
+        </div>
+
+        <!-- REAL OSM MAP MODAL -->
+        <div id="imgMapModal" class="absolute inset-0 bg-slate-50 z-50 transform translate-y-full transition-transform duration-300 flex flex-col">
+            <header class="flex items-center px-4 pt-10 pb-3 bg-emerald-700 text-white shrink-0 shadow-md z-20">
+                <button onclick="closeMapModal()" class="p-1 -ml-1 text-white"><i class="fas fa-chevron-left text-lg"></i></button>
+                <div class="flex-1 ml-3"><h2 id="map-modal-title" class="text-[15px] font-bold leading-tight">Rute ke Lokasi</h2><p class="text-[11px] text-emerald-100">Peta Offline OSM</p></div>
+            </header>
+            <div class="flex-1 relative p-4 flex flex-col items-center justify-center">
+                <!-- Container Peta Nyata -->
+                <div class="w-full h-[60%] rounded-2xl border-4 border-white shadow-lg overflow-hidden bg-slate-200 relative z-10">
+                    <div id="real-osm-map" class="w-full h-full absolute inset-0"></div>
+                </div>
+                
+                <div class="w-full bg-white rounded-2xl shadow-sm border border-slate-200 p-4 mt-6 z-10">
+                    <div class="flex justify-between items-center mb-4">
+                        <div><p class="text-[11px] font-bold text-slate-500 uppercase">Estimasi Jarak</p><p class="text-xl font-black text-slate-900" id="map-distance">450 m</p></div>
+                        <div class="bg-blue-50 text-blue-700 px-3 py-1.5 rounded-lg flex items-center gap-1.5 font-bold text-[13px]"><i class="fas fa-walking"></i> <span id="map-time">6 Menit</span></div>
+                    </div>
+                    <button onclick="closeMapModal(); setTimeout(() => navTo('screen-kompas'), 300);" class="w-full bg-emerald-600 text-white font-bold py-3.5 rounded-xl active:bg-emerald-700 transition-colors shadow-md">Mulai Jalan (Buka Kompas)</button>
+                </div>
+            </div>
+            <div class="absolute bottom-2 left-1/2 -translate-x-1/2 w-1/3 h-1.5 bg-slate-800 rounded-full z-50"></div>
+        </div>
+
+    </div>
+
+    <!-- Script Navigation & Logic -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const globalNav = document.getElementById('global-bottom-nav');
+        const homeIndicator = document.getElementById('home-indicator');
+        const navBtns = document.querySelectorAll('.nav-btn');
+
+        function handleLogin() {
+            navTo('screen-dasbor');
+        }
+
+        function handleLogout() {
+            toggleLainnyaMenu(false);
+            setTimeout(() => {
+                document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+                document.getElementById('screen-splash').classList.add('active');
+                globalNav.classList.add('hidden');
+                globalNav.classList.remove('flex');
+                homeIndicator.classList.add('hidden');
+            }, 300);
+        }
+
+        function navTo(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            const target = document.getElementById(screenId);
+            if(target) target.classList.add('active');
+
+            if(screenId === 'screen-splash') {
+                globalNav.classList.add('hidden');
+                globalNav.classList.remove('flex');
+                homeIndicator.classList.add('hidden');
+            } else {
+                globalNav.classList.remove('hidden');
+                globalNav.classList.add('flex');
+                homeIndicator.classList.remove('hidden');
+                updateNavUI(screenId);
+            }
+        }
+
+        function updateNavUI(activeScreenId) {
+            navBtns.forEach(btn => {
+                const target = btn.getAttribute('data-target');
+                if(!target) return;
+                
+                const icon = btn.querySelector('i');
+                if (target === 'screen-doa') return; 
+
+                if (target === activeScreenId || (target === 'lainnya' && activeScreenId === 'screen-kompas') || (target === 'lainnya' && activeScreenId === 'screen-kamus')) {
+                    btn.classList.add('text-emerald-700');
+                    btn.classList.remove('text-slate-400');
+                } else {
+                    btn.classList.add('text-slate-400');
+                    btn.classList.remove('text-emerald-700');
+                }
+            });
+        }
+
+        function toggleLainnyaMenu(show) {
+            const overlay = document.getElementById('lainnyaMenuOverlay');
+            const sheet = document.getElementById('lainnyaMenuSheet');
+            if (show) {
+                overlay.classList.remove('hidden');
+                setTimeout(() => { overlay.classList.remove('opacity-0'); sheet.classList.remove('translate-y-full'); }, 10);
+            } else {
+                overlay.classList.add('opacity-0'); sheet.classList.add('translate-y-full');
+                setTimeout(() => overlay.classList.add('hidden'), 300);
+            }
+        }
+
+        function switchDocTab(tab) {
+            if(tab === 'jadwal') {
+                document.getElementById('content-jadwal').classList.replace('hidden', 'block');
+                document.getElementById('content-dokumen').classList.replace('block', 'hidden');
+                document.getElementById('tab-jadwal').className = "flex-1 py-3 text-[13px] font-bold border-b-2 border-emerald-600 text-emerald-700 transition-colors";
+                document.getElementById('tab-dokumen').className = "flex-1 py-3 text-[13px] font-bold border-b-2 border-transparent text-slate-500 transition-colors";
+            } else {
+                document.getElementById('content-dokumen').classList.replace('hidden', 'block');
+                document.getElementById('content-jadwal').classList.replace('block', 'hidden');
+                document.getElementById('tab-dokumen').className = "flex-1 py-3 text-[13px] font-bold border-b-2 border-emerald-600 text-emerald-700 transition-colors";
+                document.getElementById('tab-jadwal').className = "flex-1 py-3 text-[13px] font-bold border-b-2 border-transparent text-slate-500 transition-colors";
+            }
+        }
+
+        function viewDoc(title, imgSrc) {
+            document.getElementById('doc-viewer-title').textContent = title;
+            document.getElementById('doc-viewer-img').src = imgSrc;
+            document.getElementById('docViewerModal').classList.remove('translate-y-full');
+        }
+
+        function closeDocViewer() {
+            document.getElementById('docViewerModal').classList.add('translate-y-full');
+            setTimeout(() => { document.getElementById('doc-viewer-img').src = ""; }, 300);
+        }
+
+        function toggleSOSModal(show) {
+            const overlay = document.getElementById('sosModalOverlay');
+            const card = document.getElementById('sosModalCard');
+            if (show) {
+                overlay.classList.remove('hidden');
+                setTimeout(() => { overlay.classList.remove('opacity-0'); card.classList.remove('scale-95'); }, 10);
+            } else {
+                overlay.classList.add('opacity-0'); card.classList.add('scale-95');
+                setTimeout(() => overlay.classList.add('hidden'), 300);
+            }
+        }
+
+        function sendSOS() {
+            const card = document.getElementById('sosModalCard');
+            card.innerHTML = `
+                <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4"><i class="fas fa-check text-3xl"></i></div>
+                <h2 class="text-xl font-bold text-center text-slate-900 mb-2">Terkirim!</h2>
+                <p class="text-center text-slate-600 text-[13px] mb-6 font-medium">Ust. Fulan sedang melacak lokasi Anda.</p>
+                <button onclick="toggleSOSModal(false)" class="w-full bg-slate-100 text-slate-700 font-bold py-3.5 rounded-xl active:bg-slate-200 transition-colors">Tutup</button>`;
+        }
+
+        function openEmergencyModal() {
+            const overlay = document.getElementById('emergencyModalOverlay');
+            const card = document.getElementById('emergencyModalCard');
+            overlay.classList.remove('hidden');
+            setTimeout(() => { overlay.classList.remove('opacity-0'); card.classList.remove('scale-95'); }, 10);
+        }
+
+        function closeEmergencyModal() {
+            const overlay = document.getElementById('emergencyModalOverlay');
+            const card = document.getElementById('emergencyModalCard');
+            overlay.classList.add('opacity-0'); card.classList.add('scale-95');
+            setTimeout(() => overlay.classList.add('hidden'), 300);
+        }
+
+        // ==========================================
+        // OPENSTREETMAP (LEAFLET.JS) LOGIC
+        // ==========================================
+        let osmMap = null;
+        let mapMarker = null;
+
+        function openMapModal(title) {
+            document.getElementById('map-modal-title').textContent = title;
+            document.getElementById('imgMapModal').classList.remove('translate-y-full');
+            
+            const dist = Math.floor(Math.random() * 800) + 150;
+            document.getElementById('map-distance').textContent = dist + " m";
+            document.getElementById('map-time').textContent = Math.ceil(dist / 70) + " Menit";
+
+            setTimeout(() => {
+                if (!osmMap) {
+                    osmMap = L.map('real-osm-map', {zoomControl: false}).setView([21.4225, 39.8262], 16);
+                    
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                        attribution: '© OpenStreetMap'
+                    }).addTo(osmMap);
+                    
+                    const defaultIcon = L.icon({
+                        iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+                        iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+                        shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+                        iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
+                    });
+                    
+                    mapMarker = L.marker([21.4225, 39.8262], {icon: defaultIcon}).addTo(osmMap);
+                } else {
+                    osmMap.invalidateSize(); 
+                }
+                
+                let lat = 21.4225; 
+                let lng = 39.8262;
+                
+                const titleLower = title.toLowerCase();
+                if(titleLower.includes('madinah') || titleLower.includes('baqi') || titleLower.includes('nabawi') || titleLower.includes('miqot')) {
+                    lat = 24.4672; 
+                    lng = 39.6111;
+                }
+                
+                lat += (Math.random() - 0.5) * 0.005;
+                lng += (Math.random() - 0.5) * 0.005;
+                
+                osmMap.setView([lat, lng], 16);
+                mapMarker.setLatLng([lat, lng]);
+                mapMarker.bindPopup("<b>" + title + "</b>").openPopup();
+                
+            }, 350); 
+        }
+
+        function closeMapModal() {
+            document.getElementById('imgMapModal').classList.add('translate-y-full');
+        }
+
+    </script>
+</body>
+</html>
